@@ -141,14 +141,21 @@ else:
 
 # --- API Endpoints ---
 @app.route('/predict', methods=['POST'])
+@app.route('/predict', methods=['POST'])
 def predict():
     if model is None or tokenizer is None:
         return jsonify({'success': False, 'message': 'Model hoặc tokenizer chưa được tải.'}), 503
     try:
-        history_results = request.json['history']
-        df_hist = pd.DataFrame(history_results)
-        df_hist['so_str'] = df_hist['so'].astype(str)
-        input_text = ''.join(df_hist['so_str'].tolist())
+        # --- THAY ĐỔI Ở ĐÂY ---
+        # 1. Nhận trực tiếp chuỗi text đã được xử lý
+        input_text = request.json['input_text']
+        
+        # 2. Bỏ qua các bước tiền xử lý nặng nề
+        # df_hist = pd.DataFrame(history_results)
+        # df_hist['so_str'] = df_hist['so'].astype(str)
+        # input_text = ''.join(df_hist['so_str'].tolist())
+        
+        # 3. Các bước còn lại giữ nguyên
         seq = tokenizer.texts_to_sequences([input_text])
         padded_seq = tf.keras.preprocessing.sequence.pad_sequences(seq, maxlen=MAX_LEN, padding='post')
         predictions = model.predict(padded_seq)
