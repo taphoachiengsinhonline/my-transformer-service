@@ -173,4 +173,21 @@ def learn():
         input_seq = training_sample['input']
         target_gdb = training_sample['output']
         input_pad = tf.keras.preprocessing.sequence.pad_sequences([input_seq], maxlen=MAX_LEN, padding='post')
-        y_split = [np.array([d]) for d in ta
+        y_split = [np.array([d]) for d in target_gdb]
+        model.compile(
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5),
+            loss="sparse_categorical_crossentropy",
+            metrics=["accuracy"]
+        )
+        model.fit(input_pad, y_split, epochs=3, verbose=0)
+        print("🧠 Model đã học thêm từ dữ liệu mới.")
+        save_model_to_gcs(model)
+        return jsonify({'success': True, 'message': 'Model learned and updated successfully.'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f"Error during learning: {e}"})
+
+print("--- [INFO] Khởi tạo ứng dụng hoàn tất, sẵn sàng nhận request ---")
+
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
