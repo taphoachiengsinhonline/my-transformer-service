@@ -1,4 +1,4 @@
-# File: main.py (Lưu ý tên file đã được đổi)
+# File: main.py
 import os
 import json
 import pickle
@@ -10,6 +10,8 @@ from tensorflow.keras import layers
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from google.cloud import storage
+# THÊM MỚI ĐỂ SỬA LỖI
+from google.oauth2 import service_account
 
 print("--- [INFO] Bắt đầu khởi tạo ứng dụng ---")
 
@@ -21,7 +23,7 @@ CORS(app)
 MAX_LEN = 2000
 MODEL_LOCAL_PATH = "transformer_xs_model.h5"
 TOKENIZER_LOCAL_PATH = "tokenizer.pickle"
-MODEL_GCS_PATH = "models/transformer_v1" # Thư mục trên GCS để lưu model
+MODEL_GCS_PATH = "models/transformer_v1"
 
 # --- Thiết lập GCS ---
 gcs_bucket = None
@@ -30,13 +32,19 @@ try:
     GCS_CREDENTIALS_JSON = os.environ.get('GCS_CREDENTIALS')
     if GCS_BUCKET_NAME and GCS_CREDENTIALS_JSON:
         credentials_dict = json.loads(GCS_CREDENTIALS_JSON)
-        storage_client = storage.Client(credentials=storage.credentials.Credentials.from_service_account_info(credentials_dict))
+        
+        # SỬA LỖI KẾT NỐI GCS
+        credentials = service_account.Credentials.from_service_account_info(credentials_dict)
+        storage_client = storage.Client(credentials=credentials)
+        
         gcs_bucket = storage_client.bucket(GCS_BUCKET_NAME)
         print(f"✅ [GCS] Kết nối thành công đến bucket: {GCS_BUCKET_NAME}")
     else:
         print("⚠️ [GCS] Biến môi trường GCS chưa được thiết lập. Sẽ chỉ dùng model local.")
 except Exception as e:
     print(f"❌ [GCS] Lỗi khởi tạo GCS: {e}")
+
+# --- Các phần còn lại của file giữ nguyên không đổi ---
 
 # --- Định nghĩa Lớp Custom ---
 class PositionalEmbedding(layers.Layer):
@@ -65,7 +73,6 @@ class TransformerEncoder(layers.Layer):
         proj_output = self.dense_proj(proj_input)
         return self.layernorm_2(proj_input + proj_output)
 
-# --- Dictionary cho các lớp custom ---
 custom_objects = {
     "PositionalEmbedding": PositionalEmbedding,
     "TransformerEncoder": TransformerEncoder
@@ -81,7 +88,6 @@ def load_model_from_gcs():
         print("✅ [GCS] Tải model từ GCS thành công!")
         return loaded_model
     except Exception as e:
-        # tf.errors.NotFoundError là lỗi cụ thể khi không tìm thấy file
         if "NotFoundError" in str(e) or "doesn't exist" in str(e):
              print(f"ℹ️ [GCS] Không tìm thấy model trên GCS. Đây có thể là lần deploy đầu tiên.")
         else:
@@ -119,18 +125,15 @@ def save_model_to_gcs(model_to_save):
 print("--- [INFO] Đang tải tokenizer và model ---")
 model = None
 tokenizer = None
-
 try:
     with open(TOKENIZER_LOCAL_PATH, 'rb') as handle:
         tokenizer = pickle.load(handle)
         print("✅ Tải tokenizer thành công.")
 except Exception as e:
     print(f"CRITICAL ERROR: Không thể tải tokenizer: {e}")
-
 model = load_model_from_gcs()
 if model is None:
     model = load_model_from_local()
-
 if model is None:
     print("CRITICAL ERROR: Không thể tải được bất kỳ model nào. API '/predict' và '/learn' sẽ không hoạt động.")
 else:
@@ -170,26 +173,4 @@ def learn():
         input_seq = training_sample['input']
         target_gdb = training_sample['output']
         input_pad = tf.keras.preprocessing.sequence.pad_sequences([input_seq], maxlen=MAX_LEN, padding='post')
-        y_split = [np.array([d]) for d in target_gdb]
-        
-        model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5),
-            loss="sparse_categorical_crossentropy",
-            metrics=["accuracy"]
-        )
-        model.fit(input_pad, y_split, epochs=3, verbose=0)
-        print("🧠 Model đã học thêm từ dữ liệu mới.")
-        
-        save_model_to_gcs(model)
-        return jsonify({'success': True, 'message': 'Model learned and updated successfully.'})
-    except Exception as e:
-        return jsonify({'success': False, 'message': f"Error during learning: {e}"})
-
-print("--- [INFO] Khởi tạo ứng dụng hoàn tất, sẵn sàng nhận request ---")
-
-# Dòng `if __name__ == '__main__':` không cần thiết cho Railway,
-# nhưng vẫn nên giữ lại để có thể chạy test local.
-if __name__ == '__main__':
-    # PORT sẽ được Railway cung cấp qua biến môi trường
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
+        y_split = [np.array([d]) for d in ta
